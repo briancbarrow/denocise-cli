@@ -1,17 +1,20 @@
 // import { Command } from "https://deno.land/x/cliffy@v0.25.7/command/mod.ts";
 // import ProgressBar from "https://deno.land/x/progress@v1.3.8/mod.ts";
+import { Notification } from "https://deno.land/x/deno_notify@1.4.3/ts/mod.ts";
 import {
   Checkbox,
   Number,
 } from "https://deno.land/x/cliffy@v0.25.7/prompt/mod.ts";
 import { Command } from "https://deno.land/x/cliffy@v0.25.7/command/mod.ts";
-import { NodeSound } from "npm:node-sound@0.0.8";
-const player = NodeSound.getDefaultPlayer();
+// import { NodeSound } from "npm:node-sound@0.0.8";
+// const player = NodeSound.getDefaultPlayer();
 import { parse } from "https://deno.land/std/flags/mod.ts";
 import { updateBars } from "./progress.ts";
 const { args } = Deno;
 const parsedArgs = parse(args);
-const kv = await Deno.openKv();
+const kv = await Deno.openKv("kv.sqlite3");
+const focusDone = "Basso";
+const breakDone = "Blow";
 const newArgs: Args = {
   focus: parsedArgs.focus || parsedArgs.f || 25,
   break: parsedArgs.break || parsedArgs.b || 5,
@@ -24,10 +27,10 @@ const availableExercises = getExercises.value;
 let selectedExercises: string[] = [];
 if (availableExercises) {
   selectedExercises = await Checkbox.prompt({
-    message: "Select two exercises",
+    message: "Select at least two exercises",
     options: availableExercises,
     minOptions: 2,
-    maxOptions: 2,
+    maxOptions: 3,
   });
 }
 type Args = {
@@ -50,7 +53,7 @@ await new Command()
   .option(
     "-lb, --long-break <minutes:number>",
     "Long break session length in minutes",
-    { default: 15 },
+    { default: 15 }
   )
   .option("-s, --sessions <number:number>", "Number of sessions", {
     default: 4,
@@ -77,7 +80,7 @@ function newTimer(sessions: number): void {
     if (sessions < newArgs.sessions || !isFocus) {
       showCursor();
       const cont = confirm(
-        `\nStart next ${isFocus ? "focus" : "break"} session?`,
+        `\nStart next ${isFocus ? "focus" : "break"} session?`
       );
       if (!cont) {
         showCursor();
@@ -94,7 +97,12 @@ function newTimer(sessions: number): void {
         await updateBars(totalTime, totalTime - distance, distance);
       }
       if (distance === 0) {
-        player.play("sound.wav");
+        // player.play("sound.wav");
+        new Notification({ macos: true })
+          .title("Denocise Timer Done")
+          .body(`${isFocus ? "Focus" : "Break"} session complete!`)
+          .soundName(isFocus ? focusDone : breakDone)
+          .show();
 
         clearInterval(updateInterval);
         if (!isFocus) {
@@ -102,7 +110,7 @@ function newTimer(sessions: number): void {
           for (const exercise of selectedExercises) {
             showCursor();
             const exerciseAmt = await Number.prompt(
-              `\n How many ${exercise} did you do?`,
+              `How many ${exercise} did you do?`
             );
             let exerciseAmts: number[] = [];
             const getAmt = await kv.get([
@@ -110,7 +118,6 @@ function newTimer(sessions: number): void {
               new Date().toLocaleDateString(),
             ]);
             if (getAmt.value) {
-              console.log("value", getAmt.value);
               exerciseAmts = getAmt.value;
               exerciseAmts.push(exerciseAmt);
             } else {
@@ -118,7 +125,7 @@ function newTimer(sessions: number): void {
             }
             const setAmt = await kv.set(
               [exercise, new Date().toLocaleDateString()],
-              exerciseAmts,
+              exerciseAmts
             );
             console.log(setAmt);
           }
